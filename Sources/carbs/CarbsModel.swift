@@ -17,7 +17,9 @@ final class CarbsModel: ObservableObject {
     @Published var watchersLabel = "agents: none detected"
     @Published var launchAtLogin = SMAppService.mainApp.status == .enabled
     @Published var menuBarIcon = AppConfig.defaultMenuBarIcon
-    @Published var dailyStats: [DayStat] = [] // last 14 days, for the stats chart
+    @Published var dailyStats: [DayStat] = [] // last 7 days, zero-filled, for the stats chart
+    @Published var gridTokenDraft = ""
+    @Published var gridTokenSaved = false
 
     let paths = CarbsPaths()
     var config: AppConfig
@@ -35,6 +37,8 @@ final class CarbsModel: ObservableObject {
         let c = ConfigStore.loadOrCreate(paths: paths)
         config = c
         menuBarIcon = c.menuBarIcon
+        gridTokenDraft = c.grid.token
+        gridTokenSaved = !c.grid.token.isEmpty
         store = Store(dataDir: paths.data)
         grid = GridClient(cacheURL: paths.gridCacheFile, token: c.grid.token)
         zoneResolver = ZoneResolver(config: c)
@@ -159,7 +163,7 @@ final class CarbsModel: ObservableObject {
         month = t.month
         let g = Int((t.todayDevice + t.todayModel).rounded())
         menuBarTitle = menuBarIcon.isEmpty ? "\(g)g" : "\(menuBarIcon) \(g)g"
-        dailyStats = Array(store.dailyTotals().suffix(14))
+        dailyStats = store.dailyTotals(lastDays: 7)
     }
 
     // MARK: menu actions
@@ -175,6 +179,17 @@ final class CarbsModel: ObservableObject {
         config.menuBarIcon = icon
         ConfigStore.save(config, paths: paths)
         refreshTotals()
+    }
+
+    /// Persists the Electricity Maps token entered in Settings and re-resolves the grid.
+    func applyGridToken() {
+        let t = gridTokenDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        config.grid.token = t
+        ConfigStore.save(config, paths: paths)
+        grid.token = t
+        gridTokenSaved = !t.isEmpty
+        resolution = nil // re-resolve: GPS mode (server-side vs on-device) depends on token
+        Task { await refreshGrid(force: true) }
     }
 
     func setLaunchAtLogin(_ on: Bool) {

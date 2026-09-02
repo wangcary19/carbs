@@ -20,15 +20,9 @@ struct CarbsApp: App {
             Text(model.menuBarTitle)
         }
         .menuBarExtraStyle(.window)
-
-        Settings {
-            SettingsView(model: model)
-        }
-
-        // Single on-demand window (macOS 13+): never opens at launch,
-        // only via openWindow(id: "stats") from the dropdown.
-        Window("carbs — usage stats", id: "stats") {
-            StatsView(model: model)
-        }
     }
 }
+
+// Stats and Settings windows are opened programmatically via WindowManager —
+// SwiftUI scene actions (openWindow / showSettingsWindow:) are unreliable
+// when triggered from a MenuBarExtra on recent macOS versions.

@@ -14,7 +14,7 @@ final class GridClient {
     private(set) var stale = true
 
     private let cacheURL: URL
-    private let token: String
+    var token: String // var: updatable from Settings without relaunch
     private var cache: Cache?
 
     init(cacheURL: URL, token: String) {

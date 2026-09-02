@@ -97,6 +97,16 @@ final class Store {
         return out.sorted { $0.day < $1.day }
     }
 
+    /// Last n calendar days, zero-filled where no data exists (Screen-Time-style chart).
+    func dailyTotals(lastDays n: Int) -> [DayStat] {
+        let byDay = Dictionary(uniqueKeysWithValues: dailyTotals().map { ($0.day, $0) })
+        return (0..<n).reversed().compactMap { i in
+            guard let date = Calendar.current.date(byAdding: .day, value: -i, to: Date()) else { return nil }
+            let key = Self.dayFmt.string(from: date)
+            return byDay[key] ?? DayStat(day: key)
+        }
+    }
+
     /// Archives current data aside and starts fresh.
     func reset() {
         let suffix = UUID().uuidString.prefix(6)

@@ -1,4 +1,4 @@
-// carbs — usage stats window: 14-day stacked bar chart (device vs models) + summary
+// carbs — usage stats window: past-week consumption graph, Screen Time style
 
 import Charts
 import SwiftUI
@@ -6,42 +6,72 @@ import SwiftUI
 struct StatsView: View {
     @ObservedObject var model: CarbsModel
 
+    private var dailyAvg: Double { model.week / 7 }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Past 14 days")
-                .font(.headline)
-            if model.dailyStats.isEmpty {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Past 7 days")
+                    .font(.headline)
+                Text("Total \(Int(model.week.rounded())) g CO₂e · avg \(Int(dailyAvg.rounded())) g/day")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if model.dailyStats.allSatisfy({ $0.device + $0.model == 0 }) {
                 Text("No data yet — usage accumulates as carbs runs.")
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 120)
+                    .frame(maxWidth: .infinity, minHeight: 140)
             } else {
-                Chart(model.dailyStats) { d in
-                    BarMark(x: .value("Day", shortDay(d.day)),
-                            y: .value("g", d.device))
-                        .foregroundStyle(by: .value("Source", "Device"))
-                    BarMark(x: .value("Day", shortDay(d.day)),
-                            y: .value("g", d.model))
-                        .foregroundStyle(by: .value("Source", "Models"))
+                Chart {
+                    ForEach(model.dailyStats) { d in
+                        BarMark(x: .value("Day", d.day),
+                                y: .value("g", d.device))
+                            .foregroundStyle(by: .value("Source", "Device"))
+                            .cornerRadius(3)
+                        BarMark(x: .value("Day", d.day),
+                                y: .value("g", d.model))
+                            .foregroundStyle(by: .value("Source", "Models"))
+                            .cornerRadius(3)
+                    }
+                    RuleMark(y: .value("Daily average", dailyAvg))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
+                        .foregroundStyle(.secondary)
+                        .annotation(position: .top, alignment: .trailing) {
+                            Text("avg")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                 }
+                // x stays the ISO day string (chronological order); labels show weekday
                 .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 7)) { _ in
-                        AxisValueLabel().font(.caption2)
+                    AxisMarks { value in
+                        AxisValueLabel {
+                            if let day = value.as(String.self) {
+                                Text(weekdayLabel(day))
+                                    .font(.caption2)
+                            }
+                        }
                     }
                 }
-                .frame(minHeight: 180)
+                .frame(minHeight: 170)
             }
             Divider()
             Text("Today: \(Int((model.todayDevice + model.todayModel).rounded())) g  (device \(Int(model.todayDevice.rounded())) · models \(Int(model.todayModel.rounded())))")
                 .font(.caption)
-            Text("7 days: \(Int(model.week.rounded())) g · 30 days: \(Int(model.month.rounded())) g")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
         .padding(16)
-        .frame(width: 440)
+        .frame(width: 460)
     }
 
-    private func shortDay(_ day: String) -> String {
-        String(day.suffix(5)) // "yyyy-MM-dd" → "MM-dd"
+    private static let dayParser: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f
+    }()
+    private static let weekdayFmt: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "EEE"; return f
+    }()
+
+    private func weekdayLabel(_ day: String) -> String {
+        guard let d = Self.dayParser.date(from: day) else { return day }
+        return Self.weekdayFmt.string(from: d)
     }
 }

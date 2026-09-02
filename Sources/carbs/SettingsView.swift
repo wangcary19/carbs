@@ -19,6 +19,23 @@ struct SettingsView: View {
             Text("Shown before the grams, e.g. “CO₂ 142g”. Leave empty for grams only.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Divider()
+            TextField("Electricity Maps token:", text: Binding(
+                get: { model.gridTokenDraft },
+                set: { model.gridTokenDraft = $0 }
+            ))
+            .onSubmit { model.applyGridToken() }
+            HStack {
+                Button("Save Token") { model.applyGridToken() }
+                if model.gridTokenSaved {
+                    Text("✓ live grid data enabled")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Text("Optional — free personal tier (one zone, hourly) for live data. Without it, carbs estimates from bundled averages. Stored plaintext in config.json.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Toggle("Launch at Login", isOn: Binding(
                 get: { model.launchAtLogin },
                 set: { model.setLaunchAtLogin($0) }

@@ -83,7 +83,7 @@ Rules:
   philosophy as the model energy factors — a token in `~/.carbs/config.json` replaces
   them with live data immediately.
 
-The dropdown is display-only, with an icon-button footer: **📊 usage stats** (14-day stacked device/models chart), **⚙️ Settings (⌘,)** — menu-bar icon, **Launch at Login** (SMAppService), Open Config Folder, **Export CSV…**, Reset Totals — and **✕ Quit**.
+The dropdown is display-only with a button footer: **Stats** (past-week consumption graph, Screen-Time style: stacked device/models bars, weekday labels, daily-average line), **Settings (⌘,)** — Electricity Maps token (live data), menu-bar icon, **Launch at Login** (SMAppService), Open Config Folder, **Export CSV…**, Reset Totals — and **Quit**. Windows open programmatically (`WindowManager`) since SwiftUI scene actions are unreliable from a MenuBarExtra.
 
 ## Distribution (why other Macs don't warn)
 
