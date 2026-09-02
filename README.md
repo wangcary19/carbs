@@ -31,7 +31,7 @@ Or run unpackaged during development: `swift run carbs` (location permission and
 | Grid intensity | Priority chain: Electricity Maps (token) → NESO GB (keyless) → bundled zone average → global fallback | hourly, 6 h stale cache |
 | Agent tokens | Poll-tail of `~/.pi/agent/sessions/**` (pi), `~/.claude/projects/**` (Claude Code), `~/.codex/sessions/**` (Codex CLI) with persisted byte offsets | 10 s |
 
-**Zone resolution** (priority): manual `grid.zone` in config → CoreLocation one-shot (server resolves lat/lon to a zone) → Mac region for single-zone countries → set it manually. Location is never stored. The GPS step is skipped when no token is configured — there is nothing server-side to resolve lat/lon with, so the prompt would buy nothing.
+**Zone resolution** (priority): manual `grid.zone` in config → CoreLocation one-shot → Mac region for single-zone countries → unresolved. Location is requested once and never stored. The GPS step has two modes: **with a token**, coords go to the Electricity Maps API, which resolves the zone server-side (live data); **without a token**, coords are reverse-geocoded *on-device* (CLGeocoder) to country + state/province and matched against the bundled estimate table (e.g. `US-CA`, `CA-ON`, `DE`) — no server call.
 
 **Math:**
 
@@ -66,13 +66,17 @@ number, from this priority chain:
 | --- | --- | --- | --- |
 | 1. Live | Electricity Maps `/v3/carbon-intensity/latest` | free personal token (one zone, hourly) | `238 g/kWh (CA-ON · gps)` |
 | 2. Live, keyless | [NESO Carbon Intensity API](https://carbonintensity.org.uk) — GB only, half-hourly, **no key, no registration** | zone = GB | `170 g/kWh (GB · region)` |
-| 3. Estimate | Bundled per-zone annual averages (`StaticIntensity.swift` — Ember/EM/eGRID 2023–24, rounded) | a resolved zone | `~170 g/kWh (GB · region · estimate)` |
+| 3. Estimate | Bundled annual averages (`StaticIntensity.swift`): US states (EPA eGRID), CA provinces/territories (ECCC), Europe + RoW national (Ember), rounded 2023–24 | a resolved zone/subdivision | `~230 g/kWh (US-CA · gps · estimate)` |
 | 4. Estimate | `fallback_grid_intensity_g_per_kwh` (default 400, editable) | nothing | `~400 g/kWh (global avg · estimate)` |
 
 Rules:
 
 - **GB users get live data with zero setup** — with no EM token configured and zone = GB,
   carbs automatically uses the keyless NESO API.
+- **State/province-level without a token**: allow location once and the on-device reverse
+  geocode resolves your subdivision (`US-CA`, `CA-ON`, …) — Quebec (~10) and Alberta (~600)
+  no longer share a number. Decline → national estimate for single-zone countries,
+  global average otherwise.
 - A stale live cache (6 h) still outranks estimates. Anything from tiers 3–4 is shown
   with `~` and an `· estimate` tag.
 - Static averages are *order-of-magnitude honest* (France ~50 vs Poland ~700), same

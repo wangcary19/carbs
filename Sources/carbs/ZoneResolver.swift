@@ -1,3 +1,5 @@
+// carbs — grid zone resolution: manual → GPS (two modes) → Mac region → unresolved
+
 import CoreLocation
 import Foundation
 
@@ -8,19 +10,19 @@ enum ZoneResolution {
 }
 
 /// Priority chain: manual config → GPS one-shot → Mac region (single-zone countries) → unresolved.
-/// Location is requested once, used only to resolve the grid zone, never stored.
+///
+/// The GPS step works two ways depending on whether an Electricity Maps token exists:
+///   - token:    coords go to the EM API, which resolves the zone server-side → live data
+///   - tokenless: coords are reverse-geocoded ON-DEVICE (CLGeocoder) to country +
+///                state/province, then matched against the bundled StaticIntensity table
+///                → estimate (e.g. "US-CA", "CA-ON", "DE"). No server call, coords never stored.
 final class ZoneResolver: NSObject, CLLocationManagerDelegate {
     private let config: AppConfig
     private var manager: CLLocationManager?
+    private var geocoder: CLGeocoder?
     private var completion: ((ZoneResolution) -> Void)?
-
-    /// Country code → Electricity Maps zone, only where a national zone is a sane default.
-    /// Multi-zone countries (US, CA, AU…) intentionally absent → fall to unresolved/ask.
-    private let regionZones: [String: String] = [
-        "DE": "DE", "FR": "FR", "GB": "GB", "ES": "ES", "IT": "IT", "SE": "SE",
-        "NO": "NO", "NL": "NL", "BE": "BE", "CH": "CH", "AT": "AT", "DK": "DK",
-        "FI": "FI", "IE": "IE", "PT": "PT", "PL": "PL", "NZ": "NZ",
-    ]
+    /// true → send coords to Electricity Maps; false → reverse-geocode on-device
+    private var useServerSideZone = false
 
     init(config: AppConfig) {
         self.config = config
@@ -32,11 +34,10 @@ final class ZoneResolver: NSObject, CLLocationManagerDelegate {
             completion(.zone(config.grid.zone, method: "manual"))
             return
         }
-        // 2. GPS one-shot — only useful when an Electricity Maps token can resolve
-        // lat/lon → zone server-side. Without a token the prompt buys nothing, so
-        // skip it and fall straight through to region matching.
-        if config.grid.useLocation, !config.grid.token.isEmpty {
+        // 2. GPS one-shot (mode depends on token, see class doc)
+        if config.grid.useLocation {
             self.completion = completion
+            useServerSideZone = !config.grid.token.isEmpty
             let m = CLLocationManager()
             m.delegate = self
             manager = m
@@ -54,10 +55,13 @@ final class ZoneResolver: NSObject, CLLocationManagerDelegate {
         completion(localeFallback())
     }
 
+    /// Region settings → table key, only where a national number is sane.
+    /// Subdivided countries (US/CA/AU/JP — Quebec 10 vs Alberta 600) fall through.
     private func localeFallback() -> ZoneResolution {
         if let region = Locale.current.region?.identifier,
-           let zone = regionZones[region] {
-            return .zone(zone, method: "region")
+           !StaticIntensity.subdividedCountries.contains(region),
+           StaticIntensity.gPerKwh[region] != nil {
+            return .zone(region, method: "region")
         }
         return .unresolved
     }
@@ -66,6 +70,7 @@ final class ZoneResolver: NSObject, CLLocationManagerDelegate {
         let c = completion
         completion = nil
         manager = nil
+        geocoder = nil
         c?(res)
     }
 
@@ -87,10 +92,31 @@ final class ZoneResolver: NSObject, CLLocationManagerDelegate {
             finish(localeFallback())
             return
         }
-        finish(.coords(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude, method: "gps"))
+        if useServerSideZone {
+            finish(.coords(lat: loc.coordinate.latitude, lon: loc.coordinate.longitude, method: "gps"))
+        } else {
+            reverseGeocode(loc)
+        }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         finish(localeFallback())
+    }
+
+    // MARK: tokenless GPS path — on-device reverse geocode → StaticIntensity key
+
+    private func reverseGeocode(_ loc: CLLocation) {
+        let g = CLGeocoder()
+        geocoder = g // retained until finish()
+        g.reverseGeocodeLocation(loc) { [weak self] placemarks, _ in
+            guard let self, self.completion != nil else { return }
+            let pm = placemarks?.first
+            if let key = StaticIntensity.key(forCountry: pm?.isoCountryCode,
+                                             admin: pm?.administrativeArea) {
+                self.finish(.zone(key, method: "gps"))
+            } else {
+                self.finish(self.localeFallback())
+            }
+        }
     }
 }
