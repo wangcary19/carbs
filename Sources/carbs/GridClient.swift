@@ -38,10 +38,33 @@ final class GridClient {
     /// Returns the resolved zone name on success; marks cache stale on failure.
     @discardableResult
     func refresh(zone explicitZone: String?, lat: Double? = nil, lon: Double? = nil) async -> String? {
-        guard !token.isEmpty else { return nil }
+        guard !token.isEmpty, let url = requestURL(zone: explicitZone, lat: lat, lon: lon)
+        else { return nil }
+        var req = URLRequest(url: url, timeoutInterval: 15)
+        req.setValue(token, forHTTPHeaderField: "auth-token")
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            guard (resp as? HTTPURLResponse)?.statusCode == 200,
+                  let c = parseCache(data) else {
+                stale = true
+                return nil
+            }
+            cache = c
+            intensity = c.intensity
+            zone = c.zone
+            stale = false
+            try? JSONEncoder().encode(c).write(to: cacheURL)
+            return c.zone
+        } catch {
+            stale = true
+            return nil
+        }
+    }
+
+    private func requestURL(zone: String?, lat: Double?, lon: Double?) -> URL? {
         var comps = URLComponents(string: "https://api.electricitymap.org/v3/carbon-intensity/latest")
-        if let z = explicitZone {
-            comps?.queryItems = [URLQueryItem(name: "zone", value: z)]
+        if let zone {
+            comps?.queryItems = [URLQueryItem(name: "zone", value: zone)]
         } else if let lat, let lon {
             comps?.queryItems = [
                 URLQueryItem(name: "lat", value: String(lat)),
@@ -50,29 +73,13 @@ final class GridClient {
         } else {
             return nil
         }
-        guard let url = comps?.url else { return nil }
+        return comps?.url
+    }
 
-        var req = URLRequest(url: url, timeoutInterval: 15)
-        req.setValue(token, forHTTPHeaderField: "auth-token")
-        do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            guard (resp as? HTTPURLResponse)?.statusCode == 200,
-                  let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let ci = (obj["carbonIntensity"] as? NSNumber)?.doubleValue,
-                  let z = obj["zone"] as? String else {
-                stale = true
-                return nil
-            }
-            let c = Cache(zone: z, intensity: ci, fetchedAt: Date())
-            cache = c
-            intensity = ci
-            zone = z
-            stale = false
-            try? JSONEncoder().encode(c).write(to: cacheURL)
-            return z
-        } catch {
-            stale = true
-            return nil
-        }
+    private func parseCache(_ data: Data) -> Cache? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let ci = (obj["carbonIntensity"] as? NSNumber)?.doubleValue,
+              let zone = obj["zone"] as? String else { return nil }
+        return Cache(zone: zone, intensity: ci, fetchedAt: Date())
     }
 }

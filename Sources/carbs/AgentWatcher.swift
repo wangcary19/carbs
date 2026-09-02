@@ -101,73 +101,84 @@ final class AgentWatcher {
     }
 
     private func parseLine(_ data: Data, agent: String, parser: Spec.Parser) {
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
-        var tokens = 0.0
-        var model = agent
-        var ts = Date()
-
-        switch parser {
-        case .pi:
-            // verified on this machine: {type, id, timestamp, message:{usage:{input,output,reasoning,cacheRead,cacheWrite}}}
-            guard let msg = obj["message"] as? [String: Any],
-                  let u = msg["usage"] as? [String: Any] else { return }
-            let input = (u["input"] as? NSNumber)?.doubleValue ?? 0
-            let output = (u["output"] as? NSNumber)?.doubleValue ?? 0
-            let reasoning = (u["reasoning"] as? NSNumber)?.doubleValue ?? 0
-            let cacheR = (u["cacheRead"] as? NSNumber)?.doubleValue ?? 0
-            let cacheW = (u["cacheWrite"] as? NSNumber)?.doubleValue ?? 0
-            tokens = input + output + reasoning + config.cacheTokenWeight * (cacheR + cacheW)
-            if let m = msg["model"] as? String { model = m }
-            if let s = obj["timestamp"] as? String, let d = iso.date(from: s) { ts = d }
-
-        case .claude:
-            // {message:{usage:{input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens}}}
-            guard let msg = obj["message"] as? [String: Any],
-                  let u = msg["usage"] as? [String: Any] else { return }
-            let input = (u["input_tokens"] as? NSNumber)?.doubleValue ?? 0
-            let output = (u["output_tokens"] as? NSNumber)?.doubleValue ?? 0
-            let cacheR = (u["cache_read_input_tokens"] as? NSNumber)?.doubleValue ?? 0
-            let cacheW = (u["cache_creation_input_tokens"] as? NSNumber)?.doubleValue ?? 0
-            tokens = input + output + config.cacheTokenWeight * (cacheR + cacheW)
-            if let m = msg["model"] as? String { model = m }
-            if let s = obj["timestamp"] as? String, let d = iso.date(from: s) { ts = d }
-
-        case .codex:
-            // Codex CLI rollout files: ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
-            // Format per public docs (unverified locally — codex not installed on the dev machine).
-            // {"type":"event_msg","payload":{"type":"token_count","info":{
-            //   "total_token_usage":{...cumulative...},
-            //   "last_token_usage":{"input_tokens":N,"cached_input_tokens":N,
-            //     "output_tokens":N,"reasoning_output_tokens":N,"total_tokens":N}}}}
-            // Use last_token_usage deltas — matches our incremental tail-with-offset model.
-            guard let payload = obj["payload"] as? [String: Any],
-                  (payload["type"] as? String) == "token_count",
-                  let info = payload["info"] as? [String: Any],
-                  let last = info["last_token_usage"] as? [String: Any] else { return }
-            let input = (last["input_tokens"] as? NSNumber)?.doubleValue ?? 0
-            let output = (last["output_tokens"] as? NSNumber)?.doubleValue ?? 0
-            let reasoning = (last["reasoning_output_tokens"] as? NSNumber)?.doubleValue ?? 0
-            let cached = (last["cached_input_tokens"] as? NSNumber)?.doubleValue ?? 0
-            tokens = input + output + reasoning + config.cacheTokenWeight * cached
-            model = "codex" // turn_context lines carry the model id but are skipped on first sight
-
-        case .manual:
-            // {"ts": "...", "provider": "...", "model": "...", "tokens_in": N, "tokens_out": N}
-            guard let tin = (obj["tokens_in"] as? NSNumber)?.doubleValue,
-                  let tout = (obj["tokens_out"] as? NSNumber)?.doubleValue else { return }
-            tokens = tin + tout
-            if let m = obj["model"] as? String { model = m }
-            if let s = obj["ts"] as? String, let d = iso.date(from: s) { ts = d }
-
-        case .unsupported:
-            return
-        }
-
-        guard tokens > 0 else { return }
-        let wh = tokens / 1_000_000.0 * config.factorWhPer1MTokens(for: model)
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let u = extractUsage(obj, agent: agent, parser: parser),
+              u.tokens > 0 else { return }
+        let wh = u.tokens / 1_000_000.0 * config.factorWhPer1MTokens(for: u.model)
         let g = wh * config.dcIntensity / 1000.0
-        store.append(CarbRecord(ts: ts, source: "model", tokens: tokens, g: g,
-                                detail: "\(agent)/\(model)"))
+        store.append(CarbRecord(ts: u.ts, source: "model", tokens: u.tokens, g: g,
+                                detail: "\(agent)/\(u.model)"))
+    }
+
+    struct Usage { let tokens: Double; let model: String; let ts: Date }
+
+    /// Routes one transcript line to the per-agent extractor. nil = not a usage line.
+    private func extractUsage(_ obj: [String: Any], agent: String, parser: Spec.Parser) -> Usage? {
+        switch parser {
+        case .pi: return extractPi(obj, agent: agent)
+        case .claude: return extractClaude(obj, agent: agent)
+        case .codex: return extractCodex(obj, agent: agent)
+        case .manual: return extractManual(obj, agent: agent)
+        case .unsupported: return nil
+        }
+    }
+
+    private func ts(_ any: Any?) -> Date {
+        if let s = any as? String, let d = iso.date(from: s) { return d }
+        return Date()
+    }
+
+    // verified on this machine: {type, id, timestamp, message:{usage:{input,output,reasoning,cacheRead,cacheWrite}}}
+    private func extractPi(_ obj: [String: Any], agent: String) -> Usage? {
+        guard let msg = obj["message"] as? [String: Any],
+              let u = msg["usage"] as? [String: Any] else { return nil }
+        let input = (u["input"] as? NSNumber)?.doubleValue ?? 0
+        let output = (u["output"] as? NSNumber)?.doubleValue ?? 0
+        let reasoning = (u["reasoning"] as? NSNumber)?.doubleValue ?? 0
+        let cacheR = (u["cacheRead"] as? NSNumber)?.doubleValue ?? 0
+        let cacheW = (u["cacheWrite"] as? NSNumber)?.doubleValue ?? 0
+        let tokens = input + output + reasoning + config.cacheTokenWeight * (cacheR + cacheW)
+        return Usage(tokens: tokens, model: (msg["model"] as? String) ?? agent, ts: ts(obj["timestamp"]))
+    }
+
+    // {message:{usage:{input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens}}}
+    private func extractClaude(_ obj: [String: Any], agent: String) -> Usage? {
+        guard let msg = obj["message"] as? [String: Any],
+              let u = msg["usage"] as? [String: Any] else { return nil }
+        let input = (u["input_tokens"] as? NSNumber)?.doubleValue ?? 0
+        let output = (u["output_tokens"] as? NSNumber)?.doubleValue ?? 0
+        let cacheR = (u["cache_read_input_tokens"] as? NSNumber)?.doubleValue ?? 0
+        let cacheW = (u["cache_creation_input_tokens"] as? NSNumber)?.doubleValue ?? 0
+        let tokens = input + output + config.cacheTokenWeight * (cacheR + cacheW)
+        return Usage(tokens: tokens, model: (msg["model"] as? String) ?? agent, ts: ts(obj["timestamp"]))
+    }
+
+    // Codex CLI rollout files: ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
+    // Format per public docs (unverified locally — codex not installed on the dev machine).
+    // {"type":"event_msg","payload":{"type":"token_count","info":{
+    //   "total_token_usage":{...cumulative...},
+    //   "last_token_usage":{"input_tokens":N,"cached_input_tokens":N,
+    //     "output_tokens":N,"reasoning_output_tokens":N,"total_tokens":N}}}}
+    // Uses last_token_usage deltas — matches our incremental tail-with-offset model.
+    private func extractCodex(_ obj: [String: Any], agent: String) -> Usage? {
+        guard let payload = obj["payload"] as? [String: Any],
+              (payload["type"] as? String) == "token_count",
+              let info = payload["info"] as? [String: Any],
+              let last = info["last_token_usage"] as? [String: Any] else { return nil }
+        let input = (last["input_tokens"] as? NSNumber)?.doubleValue ?? 0
+        let output = (last["output_tokens"] as? NSNumber)?.doubleValue ?? 0
+        let reasoning = (last["reasoning_output_tokens"] as? NSNumber)?.doubleValue ?? 0
+        let cached = (last["cached_input_tokens"] as? NSNumber)?.doubleValue ?? 0
+        let tokens = input + output + reasoning + config.cacheTokenWeight * cached
+        // turn_context lines carry the model id but are skipped on first sight
+        return Usage(tokens: tokens, model: agent, ts: ts(obj["timestamp"]))
+    }
+
+    // {"ts": "...", "provider": "...", "model": "...", "tokens_in": N, "tokens_out": N}
+    private func extractManual(_ obj: [String: Any], agent: String) -> Usage? {
+        guard let tin = (obj["tokens_in"] as? NSNumber)?.doubleValue,
+              let tout = (obj["tokens_out"] as? NSNumber)?.doubleValue else { return nil }
+        return Usage(tokens: tin + tout, model: (obj["model"] as? String) ?? agent, ts: ts(obj["ts"]))
     }
 
     private func saveOffsets() {

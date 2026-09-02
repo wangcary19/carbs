@@ -2,3 +2,6 @@
 *.app
 .DS_Store
 Package.resolved
+Carbs.app/
+Carbs.zip
+carbs-installer.pkg
