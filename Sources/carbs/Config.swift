@@ -14,6 +14,8 @@ struct CarbsPaths {
         root = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".carbs")
         try? FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        // Usage data and (legacy) tokens live here — owner-only.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
     }
 }
 
@@ -99,7 +101,8 @@ enum ConfigStore {
     static func save(_ cfg: AppConfig, paths: CarbsPaths) {
         let enc = JSONEncoder()
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try? enc.encode(cfg).write(to: paths.configFile)
+        try? enc.encode(cfg).write(to: paths.configFile, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: paths.configFile.path)
     }
 
     static func loadOrCreate(paths: CarbsPaths) -> AppConfig {

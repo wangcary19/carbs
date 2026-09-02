@@ -53,7 +53,7 @@ final class GridClient {
             intensity = c.intensity
             zone = c.zone
             stale = false
-            try? JSONEncoder().encode(c).write(to: cacheURL)
+            try? JSONEncoder().encode(c).write(to: cacheURL, options: .atomic)
             return c.zone
         } catch {
             stale = true
@@ -103,7 +103,7 @@ final class GridClient {
             intensity = ci
             zone = "GB"
             stale = false
-            try? JSONEncoder().encode(c).write(to: cacheURL)
+            try? JSONEncoder().encode(c).write(to: cacheURL, options: .atomic)
             return "GB"
         } catch {
             stale = true

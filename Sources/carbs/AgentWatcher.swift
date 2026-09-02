@@ -182,6 +182,6 @@ final class AgentWatcher {
     }
 
     private func saveOffsets() {
-        try? JSONEncoder().encode(offsets).write(to: offsetsURL)
+        try? JSONEncoder().encode(offsets).write(to: offsetsURL, options: .atomic)
     }
 }
