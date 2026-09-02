@@ -11,14 +11,14 @@ Display-only. No optimization, no scheduling, no nudges. **Not an extension of a
 
 ## 1. UX
 
-- Menu bar item: `🌱 142g` (today's running total)
+- Menu bar item: `CO₂ 142g` (today's running total) — icon user-customizable, default CO₂
 - Click → dropdown:
   - Today: total g CO₂e
   - Breakdown: `Device 96g · Models 46g`
   - Grid now: `238 g/kWh (CA-ON · auto)` — shows zone + how it was resolved (auto/manual/stale)
   - Watchers: `pi ✓ · ollama ✓ (local)` — which agents were discovered and are being tailed
   - This week / this month totals
-  - Quit, Reset totals, Open config folder
+  - Quit; everything else (icon, Launch at Login, config, CSV export, reset) in ⌘, Settings window
 - Nothing else. No charts in v1.
 
 ## 2. The math (all of it)

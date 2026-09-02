@@ -1,3 +1,5 @@
+// carbs — app state: sampling timers, device/model streams, totals, menu actions
+
 import AppKit
 import Foundation
 import ServiceManagement
@@ -14,9 +16,10 @@ final class CarbsModel: ObservableObject {
     @Published var zoneLabel = "grid: resolving…"
     @Published var watchersLabel = "agents: none detected"
     @Published var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @Published var menuBarIcon = AppConfig.defaultMenuBarIcon
 
     let paths = CarbsPaths()
-    let config: AppConfig
+    var config: AppConfig
     private let store: Store
     private let grid: GridClient
     private let zoneResolver: ZoneResolver
@@ -30,6 +33,7 @@ final class CarbsModel: ObservableObject {
     init() {
         let c = ConfigStore.loadOrCreate(paths: paths)
         config = c
+        menuBarIcon = c.menuBarIcon
         store = Store(dataDir: paths.data)
         grid = GridClient(cacheURL: paths.gridCacheFile, token: c.grid.token)
         zoneResolver = ZoneResolver(config: c)
@@ -127,13 +131,23 @@ final class CarbsModel: ObservableObject {
         todayModel = t.todayModel
         week = t.week
         month = t.month
-        menuBarTitle = "🌱 \(Int((t.todayDevice + t.todayModel).rounded()))g"
+        let g = Int((t.todayDevice + t.todayModel).rounded())
+        menuBarTitle = menuBarIcon.isEmpty ? "\(g)g" : "\(menuBarIcon) \(g)g"
     }
 
     // MARK: menu actions
 
     func openConfig() {
         NSWorkspace.shared.open(paths.root)
+    }
+
+    /// Persists a custom menu-bar prefix; an empty string shows grams only.
+    func setMenuBarIcon(_ s: String) {
+        let icon = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        menuBarIcon = icon
+        config.menuBarIcon = icon
+        ConfigStore.save(config, paths: paths)
+        refreshTotals()
     }
 
     func setLaunchAtLogin(_ on: Bool) {

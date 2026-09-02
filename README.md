@@ -8,8 +8,10 @@ A dead-simple macOS menu-bar app that shows your **net carbon output (g CO₂e)*
 Display-only. No optimization, no nudges, no charts. Standalone app — **not** an extension of any agent.
 
 ```text
-🌱 142g
+CO₂ 142g
 ```
+
+(menu-bar icon is customizable in Settings — CO₂ is the default)
 
 ## Build & run
 
@@ -55,7 +57,7 @@ to `~/.carbs/usage.jsonl` for anything without a watcher. Nothing depends on it.
 
 Data lives in `~/.carbs/` (append-only daily JSONL, offsets, grid cache). No telemetry, no network beyond one GET/hour.
 
-Menu extras: **Launch at Login** toggle (SMAppService), **Export CSV…** (per-day device/model grams).
+The dropdown is display-only. Everything actionable lives in **Settings (⌘,)**: menu-bar icon, **Launch at Login** (SMAppService), Open Config Folder, **Export CSV…** (per-day device/model grams), Reset Totals.
 
 ## Distribution (why other Macs don't warn)
 

@@ -19,8 +19,8 @@ cat >"$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleDisplayName</key><string>carbs</string>
     <key>CFBundleIdentifier</key><string>app.carbs.menubar</string>
     <key>CFBundleExecutable</key><string>carbs</string>
-    <key>CFBundleVersion</key><string>0.1.0</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
+    <key>CFBundleVersion</key><string>0.2.0</string>
+    <key>CFBundleShortVersionString</key><string>0.2.0</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
     <key>NSLocationWhenInUseUsageDescription</key><string>carbs uses your location once to pick the right electricity grid zone for carbon intensity. Location is never stored or shared.</string>

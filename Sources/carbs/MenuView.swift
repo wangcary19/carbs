@@ -1,3 +1,5 @@
+// carbs — menu-bar dropdown: display-only readout + Settings… (⌘,) + Quit
+
 import AppKit
 import SwiftUI
 
@@ -19,14 +21,13 @@ struct MenuView: View {
             Text("7 days: \(Int(model.week.rounded()))g · 30 days: \(Int(model.month.rounded()))g")
                 .font(.caption)
             Divider()
-            Button("Open Config Folder") { model.openConfig() }
-            Button("Export CSV…") { model.exportCSV() }
-            Toggle("Launch at Login", isOn: Binding(
-                get: { model.launchAtLogin },
-                set: { model.setLaunchAtLogin($0) }
-            ))
+            // showSettingsWindow: is the macOS 13-safe way to open a SwiftUI
+            // Settings scene (Environment.openSettings requires macOS 14).
+            Button("Settings…") {
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            }
+            .keyboardShortcut(",")
             Divider()
-            Button("Reset Totals") { model.resetTotals() }
             Button("Quit carbs") { NSApplication.shared.terminate(nil) }
         }
         .padding(12)

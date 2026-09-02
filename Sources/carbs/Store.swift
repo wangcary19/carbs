@@ -1,3 +1,5 @@
+// carbs — persistence: append-only daily JSONL, totals folding, CSV export data
+
 import Foundation
 
 struct CarbRecord: Codable {

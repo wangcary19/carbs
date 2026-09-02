@@ -1,3 +1,5 @@
+// carbs — paths, config schema, energy factors, config persistence
+
 import Foundation
 
 struct CarbsPaths {
@@ -44,11 +46,15 @@ struct GridConfig: Codable {
 }
 
 struct AppConfig: Codable {
+    /// Default menu-bar prefix before the gram value (subscript-2 CO₂).
+    static let defaultMenuBarIcon = "CO\u{2082}"
+
     var dcIntensity: Double
     var cacheTokenWeight: Double
     var fallbackGridIntensity: Double
     var grid: GridConfig
     var modelFactors: [String: Double]
+    var menuBarIcon: String
 
     enum CodingKeys: String, CodingKey {
         case grid
@@ -56,6 +62,7 @@ struct AppConfig: Codable {
         case cacheTokenWeight = "cache_token_weight"
         case fallbackGridIntensity = "fallback_grid_intensity_g_per_kwh"
         case modelFactors = "model_factors_wh_per_1M_tokens"
+        case menuBarIcon = "menu_bar_icon"
     }
 
     init() {
@@ -64,6 +71,7 @@ struct AppConfig: Codable {
         fallbackGridIntensity = 400
         grid = GridConfig()
         modelFactors = ["default": 1500, "light:*": 500, "heavy:*": 5000]
+        menuBarIcon = Self.defaultMenuBarIcon
     }
 
     init(from decoder: Decoder) throws {
@@ -74,6 +82,7 @@ struct AppConfig: Codable {
         grid = try c.decodeIfPresent(GridConfig.self, forKey: .grid) ?? GridConfig()
         modelFactors = try c.decodeIfPresent([String: Double].self, forKey: .modelFactors)
             ?? ["default": 1500, "light:*": 500, "heavy:*": 5000]
+        menuBarIcon = try c.decodeIfPresent(String.self, forKey: .menuBarIcon) ?? Self.defaultMenuBarIcon
     }
 
     /// Wh per 1M tokens for a model id: exact match → prefix glob ("light:*") → default.
@@ -87,12 +96,16 @@ struct AppConfig: Codable {
 }
 
 enum ConfigStore {
+    static func save(_ cfg: AppConfig, paths: CarbsPaths) {
+        let enc = JSONEncoder()
+        enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try? enc.encode(cfg).write(to: paths.configFile)
+    }
+
     static func loadOrCreate(paths: CarbsPaths) -> AppConfig {
         if !FileManager.default.fileExists(atPath: paths.configFile.path) {
             let cfg = AppConfig()
-            let enc = JSONEncoder()
-            enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try? enc.encode(cfg).write(to: paths.configFile)
+            save(cfg, paths: paths)
             return cfg
         }
         guard let data = try? Data(contentsOf: paths.configFile),

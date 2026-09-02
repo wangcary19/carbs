@@ -30,10 +30,10 @@ PROFILE="${NOTARY_PROFILE:-carbs-notary}"
 BUNDLE_ID="app.carbs.menubar"
 
 # --- locate signing identities -------------------------------------------
-ID_APP="${DEVELOPER_ID_APPLICATION:-$(security find-identity -v -p codesigning 2>/dev/null \
-    | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)}"
-ID_INST="${DEVELOPER_ID_INSTALLER:-$(security find-identity -v 2>/dev/null \
-    | sed -n 's/.*"\(Developer ID Installer: [^"]*\)".*/\1/p' | head -1)}"
+ID_APP="${DEVELOPER_ID_APPLICATION:-$(security find-identity -v -p codesigning 2>/dev/null |
+    sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)}"
+ID_INST="${DEVELOPER_ID_INSTALLER:-$(security find-identity -v 2>/dev/null |
+    sed -n 's/.*"\(Developer ID Installer: [^"]*\)".*/\1/p' | head -1)}"
 
 echo "▸ Developer ID Application: ${ID_APP:-NOT FOUND (will ad-hoc sign — Gatekeeper will warn!)}"
 echo "▸ Developer ID Installer:   ${ID_INST:-NOT FOUND (pkg will be unsigned)}"
@@ -43,7 +43,6 @@ swift build -c release
 rm -rf "$APP" "$ZIP" "$PKG"
 mkdir -p "$APP/Contents/MacOS"
 cp ".build/release/carbs" "$APP/Contents/MacOS/carbs"
-sed -e 's/^#!/bin/bash/^#!/' /dev/null # no-op; plist written below
 cat >"$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -83,7 +82,7 @@ if [ -n "$ID_APP" ] && xcrun notarytool history --keychain-profile "$PROFILE" >/
     if notarize "$ZIP"; then
         xcrun stapler staple "$APP"
         rm -f "$ZIP"
-        ditto -c -k --keepParent "$APP" "$ZIP"   # re-zip WITH the stapled ticket
+        ditto -c -k --keepParent "$APP" "$ZIP" # re-zip WITH the stapled ticket
         STAPLED=1
         echo "✓ $ZIP is signed + notarized + stapled — opens clean on any Mac"
     else
@@ -117,7 +116,12 @@ if [ -n "$ID_INST" ]; then
         echo "⚠ pkg signed but not notarized (no notary profile)"
     fi
 else
-    echo "⚠ skipping pkg (no Developer ID Installer certificate)"
+    echo "⚠ no Developer ID Installer cert — building UNSIGNED pkg (Gatekeeper will warn)"
+    pkgbuild --component "$APP" \
+        --install-location /Applications \
+        --identifier "$BUNDLE_ID" \
+        --version 0.2.0 \
+        "$PKG"
 fi
 
 echo

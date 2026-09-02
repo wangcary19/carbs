@@ -1,3 +1,5 @@
+// carbs — agent discovery + incremental transcript tailing (pi / claude / codex / local)
+
 import Foundation
 
 /// Discovers local agent installs and tails their session transcripts for token usage.

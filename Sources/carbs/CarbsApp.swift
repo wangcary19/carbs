@@ -20,5 +20,9 @@ struct CarbsApp: App {
             Text(model.menuBarTitle)
         }
         .menuBarExtraStyle(.window)
+
+        Settings {
+            SettingsView(model: model)
+        }
     }
 }
