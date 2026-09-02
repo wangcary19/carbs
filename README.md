@@ -83,7 +83,7 @@ Rules:
   philosophy as the model energy factors — a token in `~/.carbs/config.json` replaces
   them with live data immediately.
 
-The dropdown is display-only. Everything actionable lives in **Settings (⌘,)**: menu-bar icon, **Launch at Login** (SMAppService), Open Config Folder, **Export CSV…** (per-day device/model grams), Reset Totals.
+The dropdown is display-only, with an icon-button footer: **📊 usage stats** (14-day stacked device/models chart), **⚙️ Settings (⌘,)** — menu-bar icon, **Launch at Login** (SMAppService), Open Config Folder, **Export CSV…**, Reset Totals — and **✕ Quit**.
 
 ## Distribution (why other Macs don't warn)
 

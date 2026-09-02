@@ -18,8 +18,8 @@ Display-only. No optimization, no scheduling, no nudges. **Not an extension of a
   - Grid now: `238 g/kWh (CA-ON · auto)` — shows zone + how it was resolved (auto/manual/stale)
   - Watchers: `pi ✓ · ollama ✓ (local)` — which agents were discovered and are being tailed
   - This week / this month totals
-  - Quit; everything else (icon, Launch at Login, config, CSV export, reset) in ⌘, Settings window
-- Nothing else. No charts in v1.
+  - Icon footer: 📊 stats window (14-day chart), ⚙️ Settings ⌘, (icon, Launch at Login, config, CSV export, reset), ✕ Quit
+- Stats window (14-day stacked bar chart) added by user request; no further charting.
 
 ## 2. The math (all of it)
 

@@ -18,6 +18,14 @@ struct Totals {
     var month = 0.0
 }
 
+/// One day's device/model grams — feeds CSV export and the stats chart.
+struct DayStat: Identifiable {
+    var id: String { day }
+    let day: String // "yyyy-MM-dd"
+    var device = 0.0
+    var model = 0.0
+}
+
 /// Append-only JSONL per day under ~/.carbs/data/. Totals fold the last 30 files on read.
 final class Store {
     private let dataDir: URL
@@ -71,21 +79,20 @@ final class Store {
         return t
     }
 
-    /// Per-day device/model grams, oldest → newest. Used by CSV export.
-    func dailyTotals() -> [(day: String, device: Double, model: Double)] {
+    /// Per-day device/model grams, oldest → newest. Used by CSV export and the stats chart.
+    func dailyTotals() -> [DayStat] {
         guard let files = try? FileManager.default.contentsOfDirectory(atPath: dataDir.path)
         else { return [] }
-        var out: [(day: String, device: Double, model: Double)] = []
+        var out: [DayStat] = []
         for f in files where f.hasSuffix(".jsonl") {
-            let day = String(f.dropLast(".jsonl".count))
-            var dev = 0.0, mod = 0.0
+            var d = DayStat(day: String(f.dropLast(".jsonl".count)))
             if let data = try? Data(contentsOf: dataDir.appendingPathComponent(f)) {
                 for line in data.split(separator: 0x0a) where !line.isEmpty {
                     guard let r = try? decoder.decode(CarbRecord.self, from: Data(line)) else { continue }
-                    if r.source == "model" { mod += r.g } else { dev += r.g }
+                    if r.source == "model" { d.model += r.g } else { d.device += r.g }
                 }
             }
-            out.append((day, dev, mod))
+            out.append(d)
         }
         return out.sorted { $0.day < $1.day }
     }

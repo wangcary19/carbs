@@ -17,6 +17,7 @@ final class CarbsModel: ObservableObject {
     @Published var watchersLabel = "agents: none detected"
     @Published var launchAtLogin = SMAppService.mainApp.status == .enabled
     @Published var menuBarIcon = AppConfig.defaultMenuBarIcon
+    @Published var dailyStats: [DayStat] = [] // last 14 days, for the stats chart
 
     let paths = CarbsPaths()
     var config: AppConfig
@@ -158,6 +159,7 @@ final class CarbsModel: ObservableObject {
         month = t.month
         let g = Int((t.todayDevice + t.todayModel).rounded())
         menuBarTitle = menuBarIcon.isEmpty ? "\(g)g" : "\(menuBarIcon) \(g)g"
+        dailyStats = Array(store.dailyTotals().suffix(14))
     }
 
     // MARK: menu actions

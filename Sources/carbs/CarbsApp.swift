@@ -24,5 +24,11 @@ struct CarbsApp: App {
         Settings {
             SettingsView(model: model)
         }
+
+        // Single on-demand window (macOS 13+): never opens at launch,
+        // only via openWindow(id: "stats") from the dropdown.
+        Window("carbs — usage stats", id: "stats") {
+            StatsView(model: model)
+        }
     }
 }
