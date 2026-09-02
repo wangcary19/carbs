@@ -27,7 +27,7 @@ Or run unpackaged during development: `swift run carbs` (location permission and
 | --- | --- | --- |
 | Device watts | IOKit `AppleSmartBattery` (Voltage × InstantAmperage). No sudo. | 60 s |
 | Grid intensity | [Electricity Maps](https://api.electricitymap.org) `/v3/carbon-intensity/latest` | hourly, 6 h stale cache |
-| Agent tokens | Poll-tail of `~/.pi/agent/sessions/**` (pi) and `~/.claude/projects/**` (Claude Code) with persisted byte offsets | 10 s |
+| Agent tokens | Poll-tail of `~/.pi/agent/sessions/**` (pi), `~/.claude/projects/**` (Claude Code), `~/.codex/sessions/**` (Codex CLI) with persisted byte offsets | 10 s |
 
 **Zone resolution** (priority): manual `grid.zone` in config → CoreLocation one-shot (server resolves lat/lon to a zone) → Mac region for single-zone countries → set it manually. Location is never stored.
 
@@ -55,12 +55,38 @@ to `~/.carbs/usage.jsonl` for anything without a watcher. Nothing depends on it.
 
 Data lives in `~/.carbs/` (append-only daily JSONL, offsets, grid cache). No telemetry, no network beyond one GET/hour.
 
+Menu extras: **Launch at Login** toggle (SMAppService), **Export CSV…** (per-day device/model grams).
+
+## Distribution (why other Macs don't warn)
+
+Apps downloaded from the internet carry the quarantine xattr. Gatekeeper opens them
+without warnings only when they are **Developer ID signed + notarized + stapled**
+(ad-hoc signing always warns on other machines). One-time setup:
+
+1. Apple Developer Program membership ($99/yr)
+2. Xcode → Settings → Accounts → Manage Certificates → **Developer ID Application** and **Developer ID Installer**
+3. Store notarization credentials once:
+   `xcrun notarytool store-credentials "carbs-notary" --apple-id you@example.com --team-id ABCDE12345 --password <app-specific-password>`
+
+Then:
+
+```sh
+Scripts/release.sh   # build → sign → notarize → staple → Carbs.zip + carbs-installer.pkg
+```
+
+Distribute the **zip** (unzip → drag to /Applications; standard for menu-bar apps) or the
+**pkg** (double-click installer wizard). Both are signed and notarized; the pkg variant is
+built with `pkgbuild --component Carbs.app --install-location /Applications --sign "Developer ID Installer: …"`.
+Verify on a fresh machine with `spctl -a -vv Carbs.app` → `accepted source=Notarized Developer ID`.
+
 ## Known limitations (v1)
 
 - Battery-rail power undercounts when plugged in with a full battery (amperage ≈ 0)
 - First sight of a transcript file skips its history (only new usage is counted)
 - Browser-based chat (ChatGPT/Claude web) leaves no local trace — invisible
-- Codex CLI discovery path registered, parser pending (M4)
+- Codex CLI parser written to the public rollout format but **unverified on the dev machine** (codex not installed); fails safe if the format differs
 - Agent transcript formats drift; parsers are versioned and fail safe
 
-Roadmap: Claude/Codex parser hardening, Ollama display polish, launch-at-login, CSV export, notarized release. See `PLAN.md`.
+Roadmap: Claude/Codex parser hardening against real transcripts, per-process attribution, embodied emissions. See `PLAN.md`.
+
+Status vs PLAN.md milestones: M1–M5 code complete (launch-at-login ✅, CSV export ✅); notarized release pending an Apple Developer account — `Scripts/release.sh` automates it end-to-end.

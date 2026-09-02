@@ -69,6 +69,25 @@ final class Store {
         return t
     }
 
+    /// Per-day device/model grams, oldest → newest. Used by CSV export.
+    func dailyTotals() -> [(day: String, device: Double, model: Double)] {
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: dataDir.path)
+        else { return [] }
+        var out: [(day: String, device: Double, model: Double)] = []
+        for f in files where f.hasSuffix(".jsonl") {
+            let day = String(f.dropLast(".jsonl".count))
+            var dev = 0.0, mod = 0.0
+            if let data = try? Data(contentsOf: dataDir.appendingPathComponent(f)) {
+                for line in data.split(separator: 0x0a) where !line.isEmpty {
+                    guard let r = try? decoder.decode(CarbRecord.self, from: Data(line)) else { continue }
+                    if r.source == "model" { mod += r.g } else { dev += r.g }
+                }
+            }
+            out.append((day, dev, mod))
+        }
+        return out.sorted { $0.day < $1.day }
+    }
+
     /// Archives current data aside and starts fresh.
     func reset() {
         let suffix = UUID().uuidString.prefix(6)

@@ -1,6 +1,8 @@
 import AppKit
 import Foundation
+import ServiceManagement
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class CarbsModel: ObservableObject {
@@ -11,6 +13,7 @@ final class CarbsModel: ObservableObject {
     @Published var month = 0.0
     @Published var zoneLabel = "grid: resolving…"
     @Published var watchersLabel = "agents: none detected"
+    @Published var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     let paths = CarbsPaths()
     let config: AppConfig
@@ -131,6 +134,27 @@ final class CarbsModel: ObservableObject {
 
     func openConfig() {
         NSWorkspace.shared.open(paths.root)
+    }
+
+    func setLaunchAtLogin(_ on: Bool) {
+        do {
+            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+        } catch {
+            // Fails when not running from an .app bundle (e.g. `swift run`) — state reverts below
+        }
+        launchAtLogin = SMAppService.mainApp.status == .enabled
+    }
+
+    func exportCSV() {
+        var csv = "day,device_g,model_g,total_g\n"
+        for r in store.dailyTotals() {
+            csv += String(format: "%@,%.3f,%.3f,%.3f\n", r.day, r.device, r.model, r.device + r.model)
+        }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "carbs-export.csv"
+        panel.allowedContentTypes = [.commaSeparatedText]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? csv.write(to: url, atomically: true, encoding: .utf8)
     }
 
     func resetTotals() {

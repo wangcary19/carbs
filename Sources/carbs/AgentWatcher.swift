@@ -9,7 +9,7 @@ final class AgentWatcher {
         let rootPath: String
         let parser: Parser
         let displayOnly: Bool // local models: energy already in the device watt stream
-        enum Parser { case pi, claude, manual, unsupported }
+        enum Parser { case pi, claude, codex, manual, unsupported }
     }
 
     private let store: Store
@@ -24,7 +24,7 @@ final class AgentWatcher {
     private let specs: [Spec] = [
         Spec(name: "pi", rootPath: "~/.pi/agent/sessions", parser: .pi, displayOnly: false),
         Spec(name: "claude", rootPath: "~/.claude/projects", parser: .claude, displayOnly: false),
-        Spec(name: "codex", rootPath: "~/.codex/sessions", parser: .unsupported, displayOnly: false), // M4
+        Spec(name: "codex", rootPath: "~/.codex/sessions", parser: .codex, displayOnly: false),
         Spec(name: "ollama", rootPath: "~/.ollama/models", parser: .unsupported, displayOnly: true),
         Spec(name: "lmstudio", rootPath: "~/.lmstudio", parser: .unsupported, displayOnly: true),
     ]
@@ -129,6 +129,25 @@ final class AgentWatcher {
             tokens = input + output + config.cacheTokenWeight * (cacheR + cacheW)
             if let m = msg["model"] as? String { model = m }
             if let s = obj["timestamp"] as? String, let d = iso.date(from: s) { ts = d }
+
+        case .codex:
+            // Codex CLI rollout files: ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
+            // Format per public docs (unverified locally — codex not installed on the dev machine).
+            // {"type":"event_msg","payload":{"type":"token_count","info":{
+            //   "total_token_usage":{...cumulative...},
+            //   "last_token_usage":{"input_tokens":N,"cached_input_tokens":N,
+            //     "output_tokens":N,"reasoning_output_tokens":N,"total_tokens":N}}}}
+            // Use last_token_usage deltas — matches our incremental tail-with-offset model.
+            guard let payload = obj["payload"] as? [String: Any],
+                  (payload["type"] as? String) == "token_count",
+                  let info = payload["info"] as? [String: Any],
+                  let last = info["last_token_usage"] as? [String: Any] else { return }
+            let input = (last["input_tokens"] as? NSNumber)?.doubleValue ?? 0
+            let output = (last["output_tokens"] as? NSNumber)?.doubleValue ?? 0
+            let reasoning = (last["reasoning_output_tokens"] as? NSNumber)?.doubleValue ?? 0
+            let cached = (last["cached_input_tokens"] as? NSNumber)?.doubleValue ?? 0
+            tokens = input + output + reasoning + config.cacheTokenWeight * cached
+            model = "codex" // turn_context lines carry the model id but are skipped on first sight
 
         case .manual:
             // {"ts": "...", "provider": "...", "model": "...", "tokens_in": N, "tokens_out": N}

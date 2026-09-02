@@ -20,8 +20,13 @@ struct MenuView: View {
                 .font(.caption)
             Divider()
             Button("Open Config Folder") { model.openConfig() }
-            Button("Reset Totals") { model.resetTotals() }
+            Button("Export CSV…") { model.exportCSV() }
+            Toggle("Launch at Login", isOn: Binding(
+                get: { model.launchAtLogin },
+                set: { model.setLaunchAtLogin($0) }
+            ))
             Divider()
+            Button("Reset Totals") { model.resetTotals() }
             Button("Quit carbs") { NSApplication.shared.terminate(nil) }
         }
         .padding(12)
