@@ -33,7 +33,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Text("Optional — free personal tier (one zone, hourly) for live data. Without it, carbs estimates from bundled averages. Stored plaintext in config.json.")
+            Text("Optional — free personal tier (one zone, hourly) for live data. Without it, carbs estimates from bundled averages. Stored in your Keychain.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Toggle("Launch at Login", isOn: Binding(

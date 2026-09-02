@@ -34,13 +34,26 @@ final class CarbsModel: ObservableObject {
     private var resolving = false
 
     init() {
-        let c = ConfigStore.loadOrCreate(paths: paths)
+        var c = ConfigStore.loadOrCreate(paths: paths)
+        // Token source of truth is the Keychain. Migrate any legacy plaintext
+        // config token into it and scrub the file; if the Keychain is unusable,
+        // keep the config value (protected by 0600 perms) as fallback.
+        var token = Keychain.readToken()
+        if token == nil, !c.grid.token.isEmpty {
+            if Keychain.saveToken(c.grid.token) {
+                token = c.grid.token
+                c.grid.token = ""
+                ConfigStore.save(c, paths: paths)
+            } else {
+                token = c.grid.token
+            }
+        }
         config = c
         menuBarIcon = c.menuBarIcon
-        gridTokenDraft = c.grid.token
-        gridTokenSaved = !c.grid.token.isEmpty
+        gridTokenDraft = token ?? ""
+        gridTokenSaved = !(token ?? "").isEmpty
         store = Store(dataDir: paths.data)
-        grid = GridClient(cacheURL: paths.gridCacheFile, token: c.grid.token)
+        grid = GridClient(cacheURL: paths.gridCacheFile, token: token ?? "")
         zoneResolver = ZoneResolver(config: c)
         watcher = AgentWatcher(store: store, config: c,
                                offsetsURL: paths.offsetsFile,
@@ -184,8 +197,16 @@ final class CarbsModel: ObservableObject {
     /// Persists the Electricity Maps token entered in Settings and re-resolves the grid.
     func applyGridToken() {
         let t = gridTokenDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        config.grid.token = t
-        ConfigStore.save(config, paths: paths)
+        if Keychain.saveToken(t) {
+            if !config.grid.token.isEmpty { // scrub any legacy plaintext copy
+                config.grid.token = ""
+                ConfigStore.save(config, paths: paths)
+            }
+        } else {
+            // Keychain unavailable — fall back to the 0600-permission config file
+            config.grid.token = t
+            ConfigStore.save(config, paths: paths)
+        }
         grid.token = t
         gridTokenSaved = !t.isEmpty
         resolution = nil // re-resolve: GPS mode (server-side vs on-device) depends on token

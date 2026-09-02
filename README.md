@@ -39,7 +39,7 @@ You don't have to configure anything. Without a token, carbs estimates your grid
 For live grid data:
 
 1. Sign up for a free personal token at Electricity Maps (one zone, hourly updates).
-2. Open the dropdown → Settings → paste the token → Save Token.
+2. Open the dropdown → Settings → paste the token → Save Token (stored in your Keychain, not in the config file).
 3. Allow location access once when asked, or set your zone by hand in `~/.carbs/config.json`:
 
 ```json
@@ -94,7 +94,14 @@ Per-token energy is an active research debate, so treat the Models number as ord
 
 ## Data and privacy
 
-Everything lives in `~/.carbs/`: daily JSONL logs, byte offsets, the grid cache. No telemetry. The only network traffic is one GET per hour to your grid provider. Location coordinates are never written to disk.
+Everything lives in `~/.carbs/` (mode 0700): daily JSONL logs, byte offsets, the grid cache. The Electricity Maps token lives in your login Keychain, not on disk. No telemetry. The only network traffic is one GET per hour to your grid provider. Location coordinates are never written to disk.
+
+## Security notes
+
+- carbs runs unsandboxed (direct distribution) and reads agent transcripts under `~/.pi`, `~/.claude`, `~/.codex`, `~/.ollama`, and `~/.lmstudio`. Only token-usage fields are read; message contents are never stored or transmitted.
+- Local state is trusted as-is: another process running as your user could tamper with offsets or the grid cache and skew the numbers. There is no remote attack surface — no listening sockets, one outbound GET per hour, and transcript parsers fail closed on malformed input.
+- All state writes are atomic, the data directory is 0700, and the config file 0600.
+- If the Keychain is unavailable (some unsigned dev runs), the token falls back to the 0600 config file.
 
 ## Releasing
 
