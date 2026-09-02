@@ -32,8 +32,10 @@ final class ZoneResolver: NSObject, CLLocationManagerDelegate {
             completion(.zone(config.grid.zone, method: "manual"))
             return
         }
-        // 2. GPS one-shot
-        if config.grid.useLocation {
+        // 2. GPS one-shot — only useful when an Electricity Maps token can resolve
+        // lat/lon → zone server-side. Without a token the prompt buys nothing, so
+        // skip it and fall straight through to region matching.
+        if config.grid.useLocation, !config.grid.token.isEmpty {
             self.completion = completion
             let m = CLLocationManager()
             m.delegate = self

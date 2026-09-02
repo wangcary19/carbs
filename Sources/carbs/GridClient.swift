@@ -76,6 +76,41 @@ final class GridClient {
         return comps?.url
     }
 
+    /// GB live intensity without any token: NESO Carbon Intensity API
+    /// (api.carbonintensity.org.uk) — anonymous REST/JSON, no key, no registration,
+    /// half-hourly national data. Auto-selected when the zone resolves to GB and
+    /// no Electricity Maps token is configured.
+    @discardableResult
+    func refreshGBKeyless() async -> String? {
+        guard let url = URL(string: "https://api.carbonintensity.org.uk/intensity") else { return nil }
+        do {
+            let (data, resp) = try await URLSession.shared.data(from: url)
+            guard (resp as? HTTPURLResponse)?.statusCode == 200,
+                  let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let arr = obj["data"] as? [[String: Any]],
+                  let intensityObj = arr.first?["intensity"] as? [String: Any] else {
+                stale = true
+                return nil
+            }
+            // "actual" is null until the half-hour settles; forecast is fine for display
+            guard let ci = (intensityObj["actual"] as? NSNumber)?.doubleValue
+                ?? (intensityObj["forecast"] as? NSNumber)?.doubleValue else {
+                stale = true
+                return nil
+            }
+            let c = Cache(zone: "GB", intensity: ci, fetchedAt: Date())
+            cache = c
+            intensity = ci
+            zone = "GB"
+            stale = false
+            try? JSONEncoder().encode(c).write(to: cacheURL)
+            return "GB"
+        } catch {
+            stale = true
+            return nil
+        }
+    }
+
     private func parseCache(_ data: Data) -> Cache? {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let ci = (obj["carbonIntensity"] as? NSNumber)?.doubleValue,

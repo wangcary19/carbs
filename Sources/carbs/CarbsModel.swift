@@ -63,9 +63,8 @@ final class CarbsModel: ObservableObject {
         guard dt > 1, dt < 3600,
               let s = PowerSampler.currentWatts(), s.watts > 0.01 else { return }
         let kwh = s.watts * dt / 3_600_000.0
-        let intensity = grid.intensity ?? config.fallbackGridIntensity
         store.append(CarbRecord(ts: now, source: "device", kwh: kwh,
-                                g: kwh * intensity, detail: s.source))
+                                g: kwh * effectiveIntensity.value, detail: s.source))
         refreshTotals()
     }
 
@@ -94,34 +93,60 @@ final class CarbsModel: ObservableObject {
         refreshTotals()
     }
 
+    /// Effective g CO₂/kWh for the device stream, in priority order:
+    /// live → stale cache → bundled zone annual average → global fallback constant.
+    private var effectiveIntensity: (value: Double, kind: IntensityKind) {
+        if let live = grid.intensity { return (live, grid.stale ? .stale : .live) }
+        if let avg = StaticIntensity.intensity(forZone: resolvedZone) { return (avg, .estimate) }
+        return (config.fallbackGridIntensity, .globalEstimate)
+    }
+
+    private enum IntensityKind { case live, stale, estimate, globalEstimate }
+
+    private var resolvedZone: String? {
+        switch resolution {
+        case .zone(let z, _): return z
+        default: return grid.zone // coords resolved server-side, or restored from cache
+        }
+    }
+
     private func refreshGrid(force: Bool) async {
         guard force || grid.needsRefresh else {
             updateZoneLabel()
             return
         }
-        var lat: Double?, lon: Double?, explicit: String?
-        switch resolution {
-        case .zone(let z, _): explicit = z
-        case .coords(let la, let lo, _): lat = la; lon = lo
-        default: break
+        if !config.grid.token.isEmpty {
+            var lat: Double?, lon: Double?, explicit: String?
+            switch resolution {
+            case .zone(let z, _): explicit = z
+            case .coords(let la, let lo, _): lat = la; lon = lo
+            default: break
+            }
+            await grid.refresh(zone: explicit, lat: lat, lon: lon)
+        } else if case .zone("GB", _) = resolution {
+            // GB has a keyless live provider (NESO carbonintensity.org.uk)
+            await grid.refreshGBKeyless()
         }
-        await grid.refresh(zone: explicit, lat: lat, lon: lon)
+        // Otherwise no live source available — effectiveIntensity estimates.
         updateZoneLabel()
     }
 
     private func updateZoneLabel() {
         let method: String
         switch resolution {
-        case .zone(_, let m): method = " · " + m
-        case .coords(_, _, let m): method = " · " + m
+        case .zone(_, let m), .coords(_, _, let m): method = " · " + m
         default: method = ""
         }
-        if let z = grid.zone, let i = grid.intensity {
-            zoneLabel = "grid: \(Int(i)) g/kWh (\(z)\(method))\(grid.stale ? " · stale" : "")"
-        } else if config.grid.token.isEmpty {
-            zoneLabel = "grid: add Electricity Maps token in config.json"
-        } else {
-            zoneLabel = "grid: unresolved — set zone in config.json"
+        let e = effectiveIntensity
+        switch e.kind {
+        case .live:
+            zoneLabel = "grid: \(Int(e.value)) g/kWh (\(grid.zone ?? resolvedZone ?? "?")\(method))"
+        case .stale:
+            zoneLabel = "grid: \(Int(e.value)) g/kWh (\(grid.zone ?? "?")\(method) · stale)"
+        case .estimate:
+            zoneLabel = "grid: ~\(Int(e.value)) g/kWh (\(resolvedZone ?? "?")\(method) · estimate)"
+        case .globalEstimate:
+            zoneLabel = "grid: ~\(Int(e.value)) g/kWh (global avg · estimate)"
         }
     }
 

@@ -28,14 +28,14 @@ Or run unpackaged during development: `swift run carbs` (location permission and
 | Signal | Source | Cadence |
 | --- | --- | --- |
 | Device watts | IOKit `AppleSmartBattery` (Voltage × InstantAmperage). No sudo. | 60 s |
-| Grid intensity | [Electricity Maps](https://api.electricitymap.org) `/v3/carbon-intensity/latest` | hourly, 6 h stale cache |
+| Grid intensity | Priority chain: Electricity Maps (token) → NESO GB (keyless) → bundled zone average → global fallback | hourly, 6 h stale cache |
 | Agent tokens | Poll-tail of `~/.pi/agent/sessions/**` (pi), `~/.claude/projects/**` (Claude Code), `~/.codex/sessions/**` (Codex CLI) with persisted byte offsets | 10 s |
 
-**Zone resolution** (priority): manual `grid.zone` in config → CoreLocation one-shot (server resolves lat/lon to a zone) → Mac region for single-zone countries → set it manually. Location is never stored.
+**Zone resolution** (priority): manual `grid.zone` in config → CoreLocation one-shot (server resolves lat/lon to a zone) → Mac region for single-zone countries → set it manually. Location is never stored. The GPS step is skipped when no token is configured — there is nothing server-side to resolve lat/lon with, so the prompt would buy nothing.
 
 **Math:**
 
-- `device_g = Σ kWh × grid_intensity(g/kWh)` — falls back to `fallback_grid_intensity_g_per_kwh` when no live data
+- `device_g = Σ kWh × grid_intensity(g/kWh)` — intensity follows the estimation chain below when no live data
 - `model_g = tokens × wh_per_1M_tokens(model) / 1e6 × dc_intensity / 1000`
 - Tokens counted: `input + output + reasoning` (+ cache tokens × `cache_token_weight`, default 0)
 
@@ -56,6 +56,28 @@ Optional manual feed: append lines like
 to `~/.carbs/usage.jsonl` for anything without a watcher. Nothing depends on it.
 
 Data lives in `~/.carbs/` (append-only daily JSONL, offsets, grid cache). No telemetry, no network beyond one GET/hour.
+
+## Grid intensity without a token (estimation spec)
+
+Live grid data is nice-to-have, not a requirement. The device stream always gets a
+number, from this priority chain:
+
+| Tier | Source | Needs | Dropdown label |
+| --- | --- | --- | --- |
+| 1. Live | Electricity Maps `/v3/carbon-intensity/latest` | free personal token (one zone, hourly) | `238 g/kWh (CA-ON · gps)` |
+| 2. Live, keyless | [NESO Carbon Intensity API](https://carbonintensity.org.uk) — GB only, half-hourly, **no key, no registration** | zone = GB | `170 g/kWh (GB · region)` |
+| 3. Estimate | Bundled per-zone annual averages (`StaticIntensity.swift` — Ember/EM/eGRID 2023–24, rounded) | a resolved zone | `~170 g/kWh (GB · region · estimate)` |
+| 4. Estimate | `fallback_grid_intensity_g_per_kwh` (default 400, editable) | nothing | `~400 g/kWh (global avg · estimate)` |
+
+Rules:
+
+- **GB users get live data with zero setup** — with no EM token configured and zone = GB,
+  carbs automatically uses the keyless NESO API.
+- A stale live cache (6 h) still outranks estimates. Anything from tiers 3–4 is shown
+  with `~` and an `· estimate` tag.
+- Static averages are *order-of-magnitude honest* (France ~50 vs Poland ~700), same
+  philosophy as the model energy factors — a token in `~/.carbs/config.json` replaces
+  them with live data immediately.
 
 The dropdown is display-only. Everything actionable lives in **Settings (⌘,)**: menu-bar icon, **Launch at Login** (SMAppService), Open Config Folder, **Export CSV…** (per-day device/model grams), Reset Totals.
 
